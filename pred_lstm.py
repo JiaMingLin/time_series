@@ -486,7 +486,7 @@ class AWLSTM:
             print('model restored')
         else:
             sess.run(tf.global_variables_initializer())
-
+        best_epoch = 0
         best_valid_pred = np.zeros(self.val_gt.shape, dtype=float)
         best_test_pred = np.zeros(self.tes_gt.shape, dtype=float)
 
@@ -577,6 +577,7 @@ class AWLSTM:
             print('\tTest per:', cur_test_perf, '\tTest loss:', test_loss)
 
             if cur_valid_perf['acc'] > best_valid_perf['acc']:
+                best_epoch = i
                 best_valid_perf = copy.copy(cur_valid_perf)
                 best_valid_pred = copy.copy(val_pre)
                 best_test_perf = copy.copy(cur_test_perf)
@@ -588,8 +589,10 @@ class AWLSTM:
             )
             t4 = time()
             print('epoch:', i, ('time: %.4f ' % (t4 - t1)))
-        print('\nBest Valid performance:', best_valid_perf)
-        print('\tBest Test performance:', best_test_perf)
+
+        print('\nBest at epoch: ', best_epoch)
+        print('\tBest Valid performance: ', best_valid_perf)
+        print('\tBest Test performance: ', best_test_perf)
         sess.close()
         tf.reset_default_graph()
         if tune_para:
