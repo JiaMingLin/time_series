@@ -39,7 +39,6 @@ def get_week_dates(start_date, end_date, data_dir):
     
     start_index = date_index_map[start_date]
     end_index = date_index_map[end_date]
-
     return trading_dates[start_index:end_index]
     
 def backtesting(stock_index, strategy, budget, start_date, end_date, 
