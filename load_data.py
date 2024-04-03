@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 
-def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
+def load_cla_data(data_path, tra_date, val_date, tes_date, seq=15,
                   date_format='%Y-%m-%d'):
     fnames = [fname for fname in os.listdir(data_path) if
               os.path.isfile(os.path.join(data_path, fname))]
@@ -16,11 +16,11 @@ def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
             os.path.join(data_path, fname), dtype=float, delimiter=',',
             skip_header=False
         )
-        # using open, high, low, close, volume
+        # using persentage movement open, high, low, close
         single_EOD = single_EOD[:, 1:6]
         # print('data shape:', single_EOD.shape)
         data_EOD.append(single_EOD)
-    fea_dim = data_EOD[0].shape[1]
+    fea_dim = data_EOD[0].shape[1]-1 # remove persentage movement, which is used in generating label
 
     trading_dates = np.genfromtxt(
         os.path.join(data_path, '..', 'trading_dates.csv'), dtype=str,
@@ -37,7 +37,9 @@ def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
     for index, date in enumerate(trading_dates):
         dates_index[date] = index
         # indices_weekday[index] = datetime.strptime(date, date_format).weekday()
-        data_wd[index] = wd_encodings[datetime.strptime(date, date_format).weekday()]
+        # wd_encodings[datetime.strptime(date, date_format).weekday()]
+        # print(wd_encodings)
+        # data_wd[index] = wd_encodings[datetime.strptime(date, date_format).weekday()]
 
     tra_ind = dates_index[tra_date]
     val_ind = dates_index[val_date]
@@ -56,7 +58,7 @@ def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
         for tic_ind in range(len(fnames)):
             # if abs(data_EOD[tic_ind][date_ind][-2]) > 1e-8:
             #     if data_EOD[tic_ind][date_ind - seq: date_ind, :].min() > -123320:
-            #         tra_num += 1
+            #         continue
             tra_num += 1
     print(tra_num, ' training instances')
 
@@ -101,9 +103,9 @@ def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
             #     tra_wd[ins_ind] = data_wd[date_ind - seq: date_ind, :]
             #     tra_gt[ins_ind, 0] = (data_EOD[tic_ind][date_ind][-2] + 1) / 2
             #     ins_ind += 1
-            tra_pv[ins_ind] = data_EOD[tic_ind][date_ind - seq: date_ind, :]
+            tra_pv[ins_ind] = data_EOD[tic_ind][date_ind - seq: date_ind, 1:]
             # using close movement as label
-            tra_gt[ins_ind, 0] = 0 if (data_EOD[tic_ind][date_ind][-2] > data_EOD[tic_ind][date_ind+1][-2]) else 1
+            tra_gt[ins_ind, 0] = 0 if (data_EOD[tic_ind][date_ind][0] < 0) else 1
             ins_ind += 1
 
     # validation
@@ -122,9 +124,9 @@ def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
             #     val_wd[ins_ind] = data_wd[date_ind - seq: date_ind, :]
             #     val_gt[ins_ind, 0] = (data_EOD[tic_ind][date_ind][-2] + 1) / 2
             #     ins_ind += 1
-            val_pv[ins_ind] = data_EOD[tic_ind][date_ind - seq: date_ind, :]
-            # using close movement as label
-            val_gt[ins_ind, 0] = 0 if (data_EOD[tic_ind][date_ind][-2] > data_EOD[tic_ind][date_ind+1][-2]) else 1
+            val_pv[ins_ind] = data_EOD[tic_ind][date_ind - seq: date_ind, 1:]
+            # using close movement as label            
+            val_gt[ins_ind, 0] = 0 if (data_EOD[tic_ind][date_ind][0] < 0) else 1
             ins_ind += 1
 
     # testing
@@ -145,9 +147,9 @@ def load_cla_data(data_path, tra_date, val_date, tes_date, seq=5,
             #     tes_wd[ins_ind] = data_wd[date_ind - seq: date_ind, :]
             #     tes_gt[ins_ind, 0] = (data_EOD[tic_ind][date_ind][-2] + 1) / 2
             #     ins_ind += 1
-            tes_pv[ins_ind] = data_EOD[tic_ind][date_ind - seq: date_ind, :]
+            tes_pv[ins_ind] = data_EOD[tic_ind][date_ind - seq: date_ind, :1]
             # using close movement as label
-            tes_gt[ins_ind, 0] = 0 if (data_EOD[tic_ind][date_ind][-2] > data_EOD[tic_ind][date_ind+1][-2]) else 1
+            tes_gt[ins_ind, 0] = 0 if (data_EOD[tic_ind][date_ind][0] < 0) else 1
             ins_ind += 1
 
     # return tra_pv, tra_wd, tra_gt, val_pv, val_wd, val_gt, tes_pv, tes_wd, tes_gt
@@ -160,16 +162,27 @@ if __name__ == '__main__':
     #     '2014-01-02', '2015-08-03', '2015-10-01'
     # )
 
+    # tra_pv, tra_gt, val_pv, val_gt, tes_pv, tes_gt = load_cla_data(
+    #     'data/acl18/preprocessed/',
+    #     '2013-12-31', '2015-01-07', '2015-09-30'
+    # )
+
     tra_pv, tra_gt, val_pv, val_gt, tes_pv, tes_gt = load_cla_data(
-        'data/stocknet-dataset/raw/',
-        '2013-12-31', '2015-01-07', '2015-09-30'
+        'data/taiex/preprocessed/',
+        '2015-01-05', '2019-10-25', '2021-06-04'
     )
     # print(tra_pv.shape)
     print(tra_pv.shape)
+    print(tra_pv[:5])
     print(val_pv.shape)
+    print(val_pv[:5])
     print(tes_pv.shape)
+    print(tes_pv[:5])
     print("gt distribution")
     print('tra_gt: number of 1 is {}, number of 0 is {}'.format(np.sum(tra_gt), np.sum(1-tra_gt)))
+    print(tra_gt[:5])
     print('val_gt: number of 1 is {}, number of 0 is {}'.format(np.sum(val_gt), np.sum(1-val_gt)))
+    print(val_gt[:5])
     print('tes_gt: number of 1 is {}, number of 0 is {}'.format(np.sum(tes_gt), np.sum(1-tes_gt)))
+    print(tes_gt[:5])
     # print(np.sum(tes_gt) / 3720)

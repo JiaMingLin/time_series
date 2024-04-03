@@ -11,6 +11,7 @@ def create_features(df):
     # data = data.dropna()
 
     df['prev_close'] = df['Close'].shift(1)
+    df['prev_adj_close'] = df['Adj Close'].shift(1)
     df = df.dropna(axis='rows')
 
     df['movement_percentage'] = (df['Close']- df['prev_close'])/df['prev_close']
@@ -18,20 +19,22 @@ def create_features(df):
     df['High'] = (df['High'] / df['prev_close']) - 1
     df['Low'] = (df['Low'] / df['prev_close']) - 1
     df['Close'] = (df['Close'] / df['prev_close']) - 1
+    df['Adj Close'] = (df['Adj Close'] / df['prev_adj_close']) - 1
 
-    result_df = pd.DataFrame(columns = ['Date','movement_percentage', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    result_df = pd.DataFrame(columns = ['Date','movement_percentage', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume'])
     result_df['Date'] = df['Date']
     result_df['movement_percentage'] = df['movement_percentage']
     result_df['Open'] = df['Open']
     result_df['High'] = df['High']
     result_df['Low'] = df['Low']
     result_df['Close'] = df['Close']
+    result_df['Adj Close'] = df['Adj Close']
     result_df['Volume'] = df['Volume']
 
     scaler = StandardScaler()
-    result_df[['Open', 'High', 'Low', 'Close']] = \
+    result_df[['Close', 'Adj Close']] = \
     scaler.fit_transform(
-        result_df[['Open', 'High', 'Low', 'Close']]
+        result_df[['Close', 'Adj Close']]
     )
 
     return result_df
@@ -40,8 +43,8 @@ def write_data(dataframe, path):
     dataframe.to_csv(path, index=False)
 
 if __name__ == "__main__":
-    raw_data_dir = 'data/kdd17/raw/'
-    pre_processed_dir = 'data/kdd17/preprocessed/'
+    raw_data_dir = 'data/taiex/raw/'
+    pre_processed_dir = 'data/taiex/preprocessed/'
     columns = ['Open', 'High', 'Low', 'Close', 'Volume']
 
     stock_list = os.listdir(raw_data_dir)
