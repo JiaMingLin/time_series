@@ -12,6 +12,8 @@ from tqdm import tqdm
 
 from load_data import load_cla_data
 
+import matplotlib.pyplot as plt
+
 if torch.cuda.is_available():
     dev = 'cuda:0'
 else:
@@ -29,7 +31,7 @@ class RNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
-        self.rnn = nn.LSTM(input_size, hidden_size, batch_first=True, num_layers=4)
+        self.rnn = nn.LSTM(input_size, hidden_size, batch_first=True)
         self.fc = nn.Linear(hidden_size, output_size)
         self.sigmoid = nn.Sigmoid()
 
@@ -50,27 +52,39 @@ def predict_distribution(model, input_data, targets, name):
     output_zero = []
     for (out, gt) in zip(outputs, targets):
         if int(gt[0]) == 0:
-            output_zero.append(out)
+            output_zero.append(out[0])
         elif int(gt[0]) == 1:
-            output_one.append(out)
+            output_one.append(out[0])
         else:
             print("not supported class: ", gt)
     
-    run_one = wandb.init(name = name+"_one")
-    table_one = wandb.Table(data=output_one, columns=["scores"])
-    wandb.log({'one_histogram': wandb.plot.histogram(table_one, "scores",
- 	    title="Prediction class one distribution")})
+    x = list()
+    x.append(output_zero)
+    x.append(output_one)
 
-    run_zero = wandb.init(name = name+"_zero")
-    table_zero = wandb.Table(data=output_zero, columns=["scores"])
-    wandb.log({'zero_histogram': wandb.plot.histogram(table_zero, "scores",
- 	    title="Prediction class zero distribution")})
+    n_bins = 10
+    colors = ['red','lime']
+    plt.hist(x, n_bins, density=True, histtype='bar', color=colors, label=['predict_zero','predict_one'])
+    plt.legend(prop={'size': 10})
+    plt.title('bars with legend')
+    plt.savefig(name+'_pred_dist.png')
+
+    # table_one = wandb.Table(data=output_one, columns=["scores"])
+
+    # # run_zero = wandb.init(name = name+"_zero")
+    # table_zero = wandb.Table(data=output_zero, columns=["scores"])
+    # wandb.log({
+    #     'zero_histogram': wandb.plot.histogram(table_zero, "scores", title="Prediction class zero distribution"),
+    #     'one_histogram': wandb.plot.histogram(table_one, "scores",title="Prediction class one distribution")
+    #     })
 
 
 # Main function
 def main():
     # Define stock and date range
     dataset = 'acl18'
+    num_epochs = 100
+
     if dataset == 'acl18':
         tra_date = '2014-01-02'
         val_date = '2015-08-03'
@@ -88,6 +102,8 @@ def main():
         'data/'+dataset+'/preprocessed/',
         tra_date, val_date, tes_date
     )
+
+    # wandb.init(name = "stock_movement_prediction")
 
     # Convert data to PyTorch tensors
     features_train = torch.Tensor(features_train)
@@ -117,12 +133,11 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.005)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,300], gamma=0.5)
     # Train the model
-    num_epochs = 10
+    
+
     for epoch in range(num_epochs):
         running_loss = 0
         running_acc = 0
-        train_pred_outputs = []
-        train_gts = []
         for inputs, targets in tqdm(train_loader):
             optimizer.zero_grad()
             inputs = inputs.to(device)
@@ -136,32 +151,12 @@ def main():
 
             predicted_labels = (outputs.squeeze() > 0.5).float()
             running_acc += (predicted_labels == targets).float().mean()
-
-            train_pred_outputs += list(outputs.squeeze().cpu().detach().numpy())
-            train_gts += list(targets.squeeze().cpu().detach().numpy())
         
         scheduler.step()
-
-        train_pos,train_neg = [], []
-        for gt, pred in zip(train_gts, train_pred_outputs):
-            if (gt == 1):
-                train_pos.append(pred)
-            else:
-                train_neg.append(pred)
-        
-        train_table_pos = wandb.Table(data=[[s] for s in train_pos], columns=["pred"])
-        train_table_neg = wandb.Table(data=[[s] for s in train_neg], columns=["gt"])
-        train_pred_hist = wandb.plot.histogram(train_table_pos, value='pred', title='Predict Histogram')
-        train_gt_hist = wandb.plot.histogram(train_table_neg, value='gt', title='GT Histogram')
-        wandb.log({
-            'train_pred_histogram': train_pred_hist,
-            'train_gt_histogram': train_gt_hist
-        })
-
         running_loss = running_loss/len(train_loader)
         running_acc = running_acc/len(train_loader)
         print(f"Epoch: {epoch:d}, Training loss is {running_loss:.5f}, Training accuracy is {running_acc:.5f}%")
-        if (epoch+1) % 1 == 0:
+        if (epoch+1) % 3 == 0:
             with torch.no_grad():
                 outputs = model(features_val)
                 loss = criterion(outputs.squeeze(), labels_val.squeeze())
