@@ -1,4 +1,5 @@
 import random
+import wandb
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -23,13 +24,26 @@ np.random.seed(0)
 torch.backends.cudnn.benchmark = False
 torch.use_deterministic_algorithms(True)
 
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="stock_movement_prediction",
+
+    # track hyperparameters and run metadata
+    config={
+    "learning_rate": 0.05,
+    "architecture": "LSTM",
+    "dataset": "TAIEX_2015_2022",
+    "epochs": 400,
+    }
+)
+
 
 # Define RNN model
 class RNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
-        self.rnn = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.rnn = nn.LSTM(input_size, hidden_size, batch_first=True, num_layers=4)
         self.fc = nn.Linear(hidden_size, output_size)
         self.sigmoid = nn.Sigmoid()
 
@@ -82,7 +96,7 @@ def main():
     g.manual_seed(0)
     # Create DataLoader
     train_dataset = TensorDataset(features_train, labels_train)
-    train_loader = DataLoader(train_dataset, batch_size=256, num_workers=24, shuffle=True, worker_init_fn=seed_worker, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=256, num_workers=12, shuffle=True, worker_init_fn=seed_worker, generator=g)
 
     # Define model, loss function, and optimizer
     input_size = features_train.shape[2]
@@ -93,11 +107,13 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.005)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,300], gamma=0.5)
     # Train the model
-    num_epochs = 400
+    num_epochs = 10
     
     for epoch in range(num_epochs):
         running_loss = 0
         running_acc = 0
+        train_pred_outputs = []
+        train_gts = []
         for inputs, targets in tqdm(train_loader):
             optimizer.zero_grad()
             inputs = inputs.to(device)
@@ -110,12 +126,32 @@ def main():
 
             predicted_labels = (outputs.squeeze() > 0.5).float()
             running_acc += (predicted_labels == targets).float().mean()
+
+            train_pred_outputs += list(outputs.squeeze().cpu().detach().numpy())
+            train_gts += list(targets.squeeze().cpu().detach().numpy())
         
         scheduler.step()
+
+        train_pos,train_neg = [], []
+        for gt, pred in zip(train_gts, train_pred_outputs):
+            if (gt == 1):
+                train_pos.append(pred)
+            else:
+                train_neg.append(pred)
+        
+        train_table_pos = wandb.Table(data=[[s] for s in train_pos], columns=["pred"])
+        train_table_neg = wandb.Table(data=[[s] for s in train_neg], columns=["gt"])
+        train_pred_hist = wandb.plot.histogram(train_table_pos, value='pred', title='Predict Histogram')
+        train_gt_hist = wandb.plot.histogram(train_table_neg, value='gt', title='GT Histogram')
+        wandb.log({
+            'train_pred_histogram': train_pred_hist,
+            'train_gt_histogram': train_gt_hist
+        })
+
         running_loss = running_loss/len(train_loader)
         running_acc = running_acc/len(train_loader)
         print(f"Epoch: {epoch:d}, Training loss is {running_loss:.5f}, Training accuracy is {running_acc:.5f}%")
-        if (epoch+1) % 3 == 0:
+        if (epoch+1) % 1 == 0:
             with torch.no_grad():
                 outputs = model(features_val)
                 loss = criterion(outputs.squeeze(), labels_val.squeeze())
