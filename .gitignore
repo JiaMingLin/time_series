@@ -163,3 +163,4 @@ saved_modela/
 saved_modela/*
 tmp/
 tmp/*
+wandb/*

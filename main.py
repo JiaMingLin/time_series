@@ -24,20 +24,6 @@ np.random.seed(0)
 torch.backends.cudnn.benchmark = False
 torch.use_deterministic_algorithms(True)
 
-wandb.init(
-    # set the wandb project where this run will be logged
-    project="stock_movement_prediction",
-
-    # track hyperparameters and run metadata
-    config={
-    "learning_rate": 0.05,
-    "architecture": "LSTM",
-    "dataset": "TAIEX_2015_2022",
-    "epochs": 400,
-    }
-)
-
-
 # Define RNN model
 class RNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -54,28 +40,52 @@ class RNN(nn.Module):
         out = self.sigmoid(out)
         return out
 
+
+def predict_distribution(model, input_data, targets, name):
+    outputs = model(input_data.to(device))
+    outputs = [[e[0]] for e in outputs.cpu().detach().numpy()]
+    targets = [[e[0]] for e in targets.cpu().detach().numpy()]
+
+    output_one = []
+    output_zero = []
+    for (out, gt) in zip(outputs, targets):
+        if int(gt[0]) == 0:
+            output_zero.append(out)
+        elif int(gt[0]) == 1:
+            output_one.append(out)
+        else:
+            print("not supported class: ", gt)
+    
+    run_one = wandb.init(name = name+"_one")
+    table_one = wandb.Table(data=output_one, columns=["scores"])
+    wandb.log({'one_histogram': wandb.plot.histogram(table_one, "scores",
+ 	    title="Prediction class one distribution")})
+
+    run_zero = wandb.init(name = name+"_zero")
+    table_zero = wandb.Table(data=output_zero, columns=["scores"])
+    wandb.log({'zero_histogram': wandb.plot.histogram(table_zero, "scores",
+ 	    title="Prediction class zero distribution")})
+
+
 # Main function
 def main():
     # Define stock and date range
-    # ticker = 'AAPL'
-    # start_date = '2023-01-01'
-    # end_date = '2024-01-01'
-    sequence_length = 5  # Number of days to consider for each input sequence
-
-    # tra_date = '2014-01-02'
-    # val_date = '2015-08-03'
-    # tes_date = '2015-10-01'
-
-    # tra_date = '2013-12-31'
-    # val_date = '2015-01-07'
-    # tes_date = '2015-09-30'
-
-    tra_date = '2019-10-25'
-    val_date = '2021-06-04'
-    tes_date = '2022-12-30'
+    dataset = 'acl18'
+    if dataset == 'acl18':
+        tra_date = '2014-01-02'
+        val_date = '2015-08-03'
+        tes_date = '2015-10-01'
+    elif 'kdd17':
+        tra_date = '2013-12-31'
+        val_date = '2015-01-07'
+        tes_date = '2015-09-30'
+    elif 'taiex':
+        tra_date = '2019-10-25'
+        val_date = '2021-06-04'
+        tes_date = '2022-12-30'
 
     features_train, labels_train, features_val, labels_val, features_test, labels_test = load_cla_data(
-        'data/taiex/preprocessed/',
+        'data/'+dataset+'/preprocessed/',
         tra_date, val_date, tes_date
     )
 
@@ -108,7 +118,6 @@ def main():
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,300], gamma=0.5)
     # Train the model
     num_epochs = 10
-    
     for epoch in range(num_epochs):
         running_loss = 0
         running_acc = 0
@@ -117,6 +126,7 @@ def main():
         for inputs, targets in tqdm(train_loader):
             optimizer.zero_grad()
             inputs = inputs.to(device)
+            # print(inputs.shape)
             targets = targets.to(device)
             outputs = model(inputs)
             loss = criterion(outputs.squeeze(), targets.squeeze())
@@ -159,12 +169,22 @@ def main():
                 accuracy = (predicted_labels == labels_val).float().mean()
                 print(f'Epoch: {epoch:d}, Validation loss: {loss.item():.5f}, Accuracy: {accuracy.item()*100:.5f}%')
 
+
     # Evaluate the model
     with torch.no_grad():
         outputs = model(features_test)
         predicted_labels = (outputs.squeeze() > 0.5).float()
         accuracy = (predicted_labels == labels_test).float().mean()
         print(f'Testing Accuracy: {accuracy.item()*100:.2f}%')
+
+    training_all_sample, training_gt = next(iter(train_loader))
+    for inputs, targets in train_loader:
+        training_all_sample = torch.cat((training_all_sample, inputs), 0)
+        training_gt = torch.cat((training_gt, targets), 0)
+    
+    predict_distribution(model, training_all_sample, training_gt, 'Trainig')
+    predict_distribution(model, features_val, labels_val, 'Validation')
+    predict_distribution(model, features_test, labels_test, 'Testing')
 
 if __name__ == "__main__":
     main()
