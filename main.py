@@ -1,3 +1,4 @@
+import os
 import random
 import wandb
 import numpy as np
@@ -67,7 +68,7 @@ def predict_distribution(model, input_data, targets, name):
     plt.hist(x, n_bins, density=True, histtype='bar', color=colors, label=['predict_zero','predict_one'])
     plt.legend(prop={'size': 10})
     plt.title('bars with legend')
-    plt.savefig(name+'_pred_dist.png')
+    plt.savefig(os.path.join('exp', name+'_pred_dist.png'))
 
     # table_one = wandb.Table(data=output_one, columns=["scores"])
 
@@ -83,7 +84,7 @@ def predict_distribution(model, input_data, targets, name):
 def main():
     # Define stock and date range
     dataset = 'acl18'
-    num_epochs = 100
+    num_epochs = 10
 
     if dataset == 'acl18':
         tra_date = '2014-01-02'
@@ -177,9 +178,9 @@ def main():
         training_all_sample = torch.cat((training_all_sample, inputs), 0)
         training_gt = torch.cat((training_gt, targets), 0)
     
-    predict_distribution(model, training_all_sample, training_gt, 'Trainig')
-    predict_distribution(model, features_val, labels_val, 'Validation')
-    predict_distribution(model, features_test, labels_test, 'Testing')
+    predict_distribution(model, training_all_sample, training_gt, dataset+'_Trainig_epoch_'+str(num_epochs))
+    predict_distribution(model, features_val, labels_val, dataset+'_Validation_epoch_'+str(num_epochs))
+    predict_distribution(model, features_test, labels_test, dataset+'_Testing_epoch_'+str(num_epochs))
 
 if __name__ == "__main__":
     main()
